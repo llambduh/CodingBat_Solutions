@@ -52,3 +52,4 @@ def sleep_in(weekday, vacation):
   # We DON'T sleep in only when: it's a weekday AND we're not on vacation
   # So we COULD also write: return not (weekday and not vacation)
   # Both approaches are correct, but the original is more intuitive
+  
