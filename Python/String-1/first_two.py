@@ -46,6 +46,6 @@ def first_two(str):
     # This automatically handles all edge cases:
     #   - Strings >= 2 chars: returns first two characters
     #   - Strings with 1 char: returns that one character
-    #   - Empty strings: returns empty stringd
+    #   - Empty strings: returns empty string
     return str[:2]
     
