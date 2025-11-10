@@ -1,6 +1,10 @@
 def same_first_last(nums):
   """
   Determines if the first and last elements of an array are equal.
+
+  Time Complexity: O(1) - constant time, as we're only accessing two elements regardless of array size
+  
+  Space Complexity: O(1) - no additional space used
   
   Args:
     nums: A list of integers
@@ -22,4 +26,3 @@ def same_first_last(nums):
   # If the array has only 1 element, nums[0] and nums[-1] refer to the same element,
   # which will always be equal, so this correctly returns True
   return nums[0] == nums[-1]
-  
