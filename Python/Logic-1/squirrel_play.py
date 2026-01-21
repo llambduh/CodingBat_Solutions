@@ -37,6 +37,6 @@ def squirrel_play(temp, is_summer):
     else:
         # NON-SUMMER (Spring, Fall, Winter): Squirrels play between 60 and 90
         # degrees (inclusive). The lower upper limit reflects that squirrels
-        # prefer cooler temperatures outside of summer.
+        # prefer cooler temperatures outside of summer
         return temp >= 60 and temp <= 90
         
