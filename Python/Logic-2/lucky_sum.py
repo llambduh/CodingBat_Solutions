@@ -22,7 +22,7 @@ def lucky_sum(a, b, c):
     cut = values.index(13) if 13 in values else len(values)
 
     # Slice the list up to (but not including) the cut point,
-    # then sum the remaining values..
+    # then sum the remaining values.
     #
     # Example: values[:1] → [1]       → sum = 1
     # Example: values[:3] → [1, 2, 3] → sum = 6
