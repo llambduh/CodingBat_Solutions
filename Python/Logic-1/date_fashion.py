@@ -34,6 +34,6 @@ def date_fashion(you, date):
     # - Neither person is unstylish (both > 2)
     # - Neither person is very stylish (both < 8)
     # So both stylishness values are in the range 3-7 (inclusive)
-    # The result is "maybe",
+    # The result is "maybe"
     return 1  # Maybe - average stylishness for both
     
