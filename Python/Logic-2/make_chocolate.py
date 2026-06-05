@@ -28,6 +28,6 @@ def make_chocolate(small, big, goal):
     if remainder <= small:
         return remainder
     else:
-        # If the remainder cannot be met with available small bars, return -1,
+        # If the remainder cannot be met with available small bars, return -1
         return -1
     
