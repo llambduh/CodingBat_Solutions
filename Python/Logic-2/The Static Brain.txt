@@ -1,0 +1,152 @@
+System Architecture at a Glance
+
+┌────────────────────────────────────────────────────────────┐
+│           1. HYBRID KNOWLEDGE (The Static Brain)           │
+│                                                            │
+│  [ Obsidian Vault ] ────(Upload)────> [ NotebookLM ]       │
+│  (Manual PRD Entry)                    (Synthesizer)       │
+│                                              │             │
+│  [ Local Folder: /context ] <────(Export)────┘             │
+└──────────────────────────┬─────────────────────────────────┘
+                           │ JSON Schema & Rules on Disk
+                           ▼
+
+Detailed Technical Breakdown
+Hybrid Knowledge (The Static Brain)
+
+Purpose: Convert a human-authored PRD into a source-grounded, machine-readable schema contract, without any AI strategy layer standing between the human and the vault.
+
+Obsidian Vault (Manual PRD Entry)
+
+
+The human engineer writes PRDs and engineering notes directly into the vault — there is no Claude Fable 5 or Opus 4.8 pass in the MVP. This is the biggest scope reduction relative to the full architecture, and it's deliberate: it isolates the execution loop from any strategy-layer variability while that loop is still being validated.
+
+
+NotebookLM (Synthesizer)
+
+
+Ingests the Obsidian staging directories exactly as in the full architecture: source-grounded reasoning, cross-referencing PRD prose to generate JSON Schema Rules, Data Dictionaries, and PII Token Routing Matrices without hallucination.
+This is the one phase where the MVP and the full architecture are functionally identical — grounding was never the risky part; the execution loop was.
+
+
+Local Folder: /context (Flat-File Handoff)
+
+
+Where the full architecture uses an OmniRoute local vector store, the MVP uses a plain local folder. Finalized JSON contracts are exported from NotebookLM directly into /context on the workstation, and every downstream script or agent reads from that folder directly.
+This is a genuine simplification, not a stopgap for its own sake: at MVP scale, a handful of JSON files in a folder is fully sufficient, and a vector store's indexing/embedding overhead buys nothing yet. See Section 11 for when this gets upgraded.
+
+
+Context Engineering & Staging Roadmap:
+
+Objective: Wire up the data grounding mechanism using Obsidian and NotebookLM, producing the first real /context JSON contracts and the seeded mock data that Phase 3's sub-agents will build and test against.
+
+
+Milestone 1.1: Structuralize the Local Obsidian Vault
+
+Objective: Establish the input/output directory matrix inside the Obsidian vault so PRD authorship and NotebookLM's synthesized exports have a consistent, predictable home.
+
+Technical Detail:
+
+
+Create the vault's top-level structure with (at minimum) two directories: 01_Strategy_Ingest — where hand-authored PRDs and engineering notes land — and 02_NotebookLM_Exports — where NotebookLM's synthesized JSON (schema rules, data dictionaries, PII routing matrices) is placed after export, before being copied into the local /context folder that Phase 1's init.ps1 created.
+Numbering the directories (01_, 02_) is deliberate: it enforces a visual, chronological ordering in Obsidian's file browser that matches the actual data flow direction (PRD in, synthesized contract out), reducing the chance of an operator uploading the wrong folder to NotebookLM.
+Each PRD entry should follow a lightweight, consistent front-matter convention (e.g., a project/version identifier) so that when multiple PRDs exist side by side later, NotebookLM's synthesis pass can be scoped to the correct one.
+
+
+Inputs: None (this is a manual vault-structuring task).
+
+Outputs: A structured Obsidian vault with 01_Strategy_Ingest and 02_NotebookLM_Exports established as the standing convention for all future ARE work, not just this MVP.
+
+Acceptance Criteria:
+
+
+ Both directories exist in the vault with a documented (even if brief) README.md inside each explaining its purpose and the front-matter convention.
+ A test PRD placed in 01_Strategy_Ingest can be uploaded to NotebookLM and its corresponding synthesized output placed in 02_NotebookLM_Exports without ambiguity about which PRD it came from.
+
+
+Risks / Edge Cases:
+
+
+As PRD volume grows post-MVP, a flat 01_Strategy_Ingest folder may need sub-folders per project — worth a one-line note in the vault's README.md that this is a known future scaling point, so it isn't rediscovered as a surprise later.
+
+
+
+Milestone 1.2: Establish Strict Markdown Prompt Guidelines for NotebookLM
+
+Objective: Guarantee deterministic, non-hallucinated JSON output schemas from NotebookLM's synthesis pass.
+
+Technical Detail:
+
+
+Author a reusable prompt template (stored in the vault, e.g., alongside 02_NotebookLM_Exports or in a dedicated 00_Prompt_Templates folder) that explicitly instructs NotebookLM to: (1) answer strictly from the uploaded source documents with no outside inference, (2) output valid JSON matching a fixed top-level shape (schema_rules, data_dictionary, pii_routing_matrix as named keys), and (3) flag explicitly, rather than guess, when a PRD is ambiguous about a field's type or nullability.
+The "guarantee deterministic... output" goal is aspirational — LLM-backed synthesis is not perfectly deterministic — so the practical target for Week 2 is structurally deterministic: the JSON shape is always valid and parseable, even if wording inside descriptions varies slightly run to run. Validate this by running the same PRD through the prompt template multiple times and diffing the resulting JSON structures (not the prose values) for shape consistency.
+Include at least one explicit negative example in the prompt template — a PRD field that's genuinely ambiguous — and confirm NotebookLM flags it rather than silently inventing a plausible-sounding type.
+
+
+Inputs: A representative test PRD; the prompt template itself.
+
+Outputs: A versioned prompt template document; a validated JSON output shape contract that Milestone 1.3 (seed_mocks.ps1) and sub-agents will depend on.
+
+Acceptance Criteria:
+
+
+ Running the test PRD through the prompt template three separate times produces JSON that is structurally identical (same keys, same nesting, same field-level type declarations) across all three runs, even if prose descriptions vary.
+ The deliberately ambiguous test field is flagged by NotebookLM rather than assigned an invented type.
+ The output JSON validates against a minimal JSON Schema (or equivalent lightweight schema-of-the-schema) checked into the repo, so schema drift in NotebookLM's output format is caught automatically in later runs rather than discovered by a downstream script failing.
+
+
+Risks / Edge Cases:
+
+
+NotebookLM's synthesis quality is sensitive to how the source PRD itself is written; a poorly structured PRD will produce a poorly structured schema no matter how good the prompt template is. Document this dependency clearly rather than treating prompt-template quality as the only lever.
+Treat the prompt template itself as a versioned artifact — if it's tuned later in response to observed failures, that revision should be tracked, since downstream scripts implicitly depend on its current output shape.
+
+
+
+Milestone 1.3: Build seed_mocks.ps1
+
+Objective: Read the exported JSON data dictionaries and generate mock parquet/CSV datasets inside /data/raw, giving Phase 3's sub-agents real data to build and test against.
+
+Technical Detail:
+
+Reads the finalized JSON contract from /context and, for each field in the data dictionary, generates a deterministic synthetic value generator: fixed random seed, so re-running the script produces byte-identical mock data unless the seed or schema changes.
+Output format should match whatever the pipeline's declared sink expects — .csv for simple tabular pipelines, .parquet where the schema specifies more complex typed columns. The script should support both, selecting based on a schema-level hint (e.g., a format field in the contract) rather than being hardcoded to one.
+Row count and edge-case coverage matter: the generator should deliberately include boundary values (nulls where the schema allows them, min/max numeric ranges, empty strings where permitted) rather than only "happy path" rows — Phase 3's Kilo Code CLI validation step is only as good as the data it's testing against.
+Drops generated files into /data/raw/<pipeline-name>/, matching the directory convention init.ps1 established in Phase 1.
+
+
+Inputs: /context JSON schema/data dictionary.
+
+Outputs: Deterministic mock .csv/.parquet files in /data/raw/<pipeline-name>/.
+
+Acceptance Criteria:
+
+
+ Running .\seed_mocks.ps1 twice against the same /context schema produces byte-identical output files.
+ Generated data includes at least one deliberate null/boundary-value row for every field the schema marks as nullable or range-constrained.
+ Output format (.csv vs .parquet) correctly matches the schema's declared format hint without manual intervention.
+ A quick manual read of the generated file (e.g., via DuckDB CLI) confirms column names and types match the /context data dictionary exactly.
+
+
+Risks / Edge Cases:
+
+
+Schema fields with loosely specified types will produce a mock-data generator that has to guess a concrete type — document any such guesses clearly in the script's output log so they're visible rather than silently baked in.
+Determinism can quietly break if the script's random seed handling accidentally depends on wall-clock time anywhere (e.g., a timestamp field defaulting to "now" instead of a fixed seeded value) — audit every field generator specifically for this.
+
+
+
+Deliverables Checklist
+
+
+ Obsidian vault restructured with 01_Strategy_Ingest and 02_NotebookLM_Exports, each with a short README.md.
+ Versioned NotebookLM prompt template producing structurally consistent JSON, validated against a minimal schema-of-the-schema.
+ seed_mocks.ps1 committed and validated for determinism, format-selection, and boundary-value coverage.
+ At least one full test PRD run end-to-end through Phase 1 + Phase 2: PRD authored → NotebookLM synthesis → /context populated → seed_mocks.ps1 producing real mock data in /data/raw.
+
+
+Exit Criteria
+
+
+ A test PRD can go from hand-written Markdown to seeded mock data on disk with no manual JSON editing anywhere in the chain.
+ The JSON contract's shape is stable enough that sub-agents can be pointed at /context with confidence its structure won't shift mid-validation.
